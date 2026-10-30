@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>India Mobility Matrix: Public Commute vs Car Ownership</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js & D3.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#2563eb',
+              600: '#1d4ed8',
+              700: '#1e40af',
+              900: '#0f172a',
+            },
+            transit: '#10b981',
+            car: '#f43f5e',
+            balanced: '#8b5cf6'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom scrollbars and styling tweaks */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.05);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.3);
+      border-radius: 3px;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+    }
+    .dark .glass-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .map-state {
+      transition: all 0.25s ease;
+      cursor: pointer;
+      stroke: #ffffff;
+      stroke-width: 1px;
+    }
+    .map-state:hover {
+      filter: brightness(1.15) drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+      stroke: #0f172a;
+      stroke-width: 2px;
+    }
+    .pulsing-dot {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased transition-colors duration-300 min-h-screen">
+
+  <!-- Top Navigation / Header -->
+  <header class="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <i class="fa-solid fa-bus-simple text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-display font-bold text-lg sm:text-xl text-slate-900 dark:text-white leading-tight">
+            India Mobility Matrix
+          </h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
+            Public Commute Share (Census) vs. Car Ownership % (NFHS-5)
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 sm:space-x-4">
+        <!-- Quick Stats Pill -->
+        <div class="hidden md:flex items-center space-x-4 text-xs font-medium bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div><span class="text-slate-400">States Tracked:</span> <span class="font-bold text-slate-800 dark:text-slate-200">29</span></div>
+          <div class="h-3 w-px bg-slate-300 dark:bg-slate-700"></div>
+          <div><span class="text-slate-400">Max PT Share:</span> <span class="font-bold text-emerald-600 dark:text-emerald-400">J&K (40.6%)</span></div>
+          <div class="h-3 w-px bg-slate-300 dark:bg-slate-700"></div>
+          <div><span class="text-slate-400">Max Car Ownership:</span> <span class="font-bold text-rose-500">Goa (45.2%)</span></div>
+        </div>
+
+        <!-- Theme Toggle -->
+        <button id="themeToggleBtn" onclick="toggleTheme()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+          <i class="fa-solid fa-moon dark:hidden"></i>
+          <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+
+    <!-- Key Insights & Overview Section -->
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <!-- Metric Card 1 -->
+      <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-emerald-500 relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">Transit Champions</span>
+            <h3 class="text-2xl font-bold font-display text-slate-900 dark:text-white mt-1">Tamil Nadu</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">32.7% PT vs 6.5% Cars</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-train-subway"></i>
+          </div>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-3 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+          High public transit adoption with low private car reliance (Ratio: <strong>5.0x</strong>).
+        </p>
+      </div>
+
+      <!-- Metric Card 2 -->
+      <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-amber-500 relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400">Car-Heavy Sprawls</span>
+            <h3 class="text-2xl font-bold font-display text-slate-900 dark:text-white mt-1">Punjab</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">11.1% PT vs 21.9% Cars</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-car-side"></i>
+          </div>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-3 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+          High private motorization outstrips public bus/rail commuting (Ratio: <strong>0.5x</strong>).
+        </p>
+      </div>
+
+      <!-- Metric Card 3 -->
+      <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-indigo-500 relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-indigo-600 dark:text-indigo-400">Dual Mobility Hubs</span>
+            <h3 class="text-2xl font-bold font-display text-slate-900 dark:text-white mt-1">Kerala & J&K</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">~40% PT & ~24% Cars</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-arrows-split-up-and-left"></i>
+          </div>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-3 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+          Thriving public commute coexisting with elevated private car ownership rates.
+        </p>
+      </div>
+
+      <!-- Metric Card 4 -->
+      <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-rose-500 relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-rose-600 dark:text-rose-400">Transit Vacuum</span>
+            <h3 class="text-2xl font-bold font-display text-slate-900 dark:text-white mt-1">Bihar & Odisha</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">&lt;13% PT & ~2% Cars</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-3 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+          Low public transport and low car ownership; heavy reliance on 2-wheelers & walk.
+        </p>
+      </div>
+    </section>
+
+    <!-- Interactive Controls & Tab Selector -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+      
+      <!-- Metric Filter Buttons for Map -->
+      <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2 ml-2">Map Layer:</span>
+        <button onclick="setMapMetric('pt')" id="btnMetricPT" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all bg-emerald-500 text-white shadow-sm">
+          <i class="fa-solid fa-bus mr-1.5"></i> Public Transport %
+        </button>
+        <button onclick="setMapMetric('car')" id="btnMetricCar" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <i class="fa-solid fa-car mr-1.5"></i> Car Ownership %
+        </button>
+        <button onclick="setMapMetric('ratio')" id="btnMetricRatio" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <i class="fa-solid fa-scale-balanced mr-1.5"></i> Reliance Ratio (PT/Car)
+        </button>
+      </div>
+
+      <!-- View Selector -->
+      <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-medium w-full sm:w-auto justify-center">
+        <button onclick="switchMainView('map')" id="btnViewMap" class="px-3 py-1.5 rounded-lg font-semibold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs">
+          <i class="fa-solid fa-map-location-dot mr-1"></i> Interactive Map
+        </button>
+        <button onclick="switchMainView('scatter')" id="btnViewScatter" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+          <i class="fa-solid fa-chart-scatter mr-1"></i> Quadrant Matrix
+        </button>
+        <button onclick="switchMainView('table')" id="btnViewTable" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+          <i class="fa-solid fa-list-ol mr-1"></i> Leaderboard
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN INTERACTIVE DISPLAY AREA -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- Left / Primary Visualization Box (8 Cols) -->
+      <div class="lg:col-span-8 space-y-6">
+
+        <!-- MAP VIEW PANEL -->
+        <div id="panelMapView" class="glass-card rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 id="mapTitle" class="font-display font-bold text-lg text-slate-900 dark:text-white">
+                Public Commute Share across India
+              </h2>
+              <p id="mapSubtitle" class="text-xs text-slate-500 dark:text-slate-400">
+                Percentage of commuters relying on Bus and Train networks (Census 2011)
+              </p>
+            </div>
+            <!-- Dynamic Legend -->
+            <div id="mapLegend" class="flex items-center space-x-1 text-xs">
+              <!-- Dynamically populated JS -->
+            </div>
+          </div>
+
+          <!-- SVG Interactive India Map Container -->
+          <div class="relative min-h-[480px] w-full flex items-center justify-center bg-slate-50/50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800/80 overflow-hidden">
+            <svg id="indiaMapSvg" viewBox="0 0 620 700" class="w-full h-auto max-h-[580px] drop-shadow-md">
+              <!-- Rendered dynamically by D3 / SVG Path Generator -->
+            </svg>
+
+            <!-- Map Tooltip Popup -->
+            <div id="mapTooltip" class="absolute hidden pointer-events-none glass-card p-3 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 text-xs z-50 transition-opacity duration-150 max-w-xs">
+              <!-- Tooltip JS injected -->
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center text-xs text-slate-400 pt-1">
+            <span><i class="fa-solid fa-circle-info mr-1"></i> Click any state on map or grid to inspect full profile</span>
+            <span>Scale dynamically auto-calibrated</span>
+          </div>
+        </div>
+
+        <!-- SCATTER MATRIX PANEL -->
+        <div id="panelScatterView" class="glass-card rounded-2xl p-5 shadow-sm space-y-4 hidden">
+          <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 class="font-display font-bold text-lg text-slate-900 dark:text-white">
+                Mobility Quadrant Matrix
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                Car Ownership % (X-axis) vs. Public Commute Share % (Y-axis)
+              </p>
+            </div>
+            <div class="text-xs text-slate-400">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1"></span> Quadrants
+            </div>
+          </div>
+
+          <!-- Scatter Chart Canvas -->
+          <div class="relative h-[480px] w-full">
+            <canvas id="mobilityScatterChart"></canvas>
+          </div>
+
+          <!-- Quadrant Legend Cards -->
+          <div class="grid grid-cols-2 gap-3 text-xs pt-2">
+            <div class="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50">
+              <strong class="text-emerald-700 dark:text-emerald-300 block mb-0.5">Top-Left: Transit Champions</strong>
+              Low Car Ownership (&lt;15%) + High Public Transport (&gt;20%). Example: Tamil Nadu, WB, Karnataka.
+            </div>
+            <div class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/50">
+              <strong class="text-indigo-700 dark:text-indigo-300 block mb-0.5">Top-Right: Dual Mobility Hubs</strong>
+              High Car Ownership (&gt;15%) + High Public Transport (&gt;20%). Example: Goa, J&K, Kerala, Delhi.
+            </div>
+            <div class="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/50">
+              <strong class="text-rose-700 dark:text-rose-300 block mb-0.5">Bottom-Left: Under-Connected</strong>
+              Low Car Ownership (&lt;15%) + Low Public Transport (&lt;20%). Example: Bihar, Odisha, UP.
+            </div>
+            <div class="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+              <strong class="text-amber-700 dark:text-amber-300 block mb-0.5">Bottom-Right: Car-Heavy Sprawls</strong>
+              High Car Ownership (&gt;15%) + Low Public Transport (&lt;20%). Example: Punjab, Sikkim, Nagaland.
+            </div>
+          </div>
+        </div>
+
+        <!-- LEADERBOARD TABLE PANEL -->
+        <div id="panelTableView" class="glass-card rounded-2xl p-5 shadow-sm space-y-4 hidden">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 class="font-display font-bold text-lg text-slate-900 dark:text-white">
+                State Mobility Ranking
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                Compare dataset metrics across all 29 States & Union Territories
+              </p>
+            </div>
+            
+            <!-- Table Search Input -->
+            <div class="relative w-full sm:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+              <input type="text" id="tableSearch" onkeyup="filterTable()" placeholder="Search state..." class="w-full bg-slate-100 dark:bg-slate-800 border-0 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+
+          <div class="overflow-x-auto max-h-[500px]">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold uppercase tracking-wider z-10">
+                <tr>
+                  <th class="p-3 rounded-l-xl cursor-pointer hover:text-indigo-600" onclick="sortTable(0)">State / UT <i class="fa-solid fa-sort ml-1"></i></th>
+                  <th class="p-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortTable(1)">Car Ownership % <i class="fa-solid fa-sort ml-1"></i></th>
+                  <th class="p-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortTable(2)">Public Commute % <i class="fa-solid fa-sort ml-1"></i></th>
+                  <th class="p-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortTable(3)">Reliance Ratio <i class="fa-solid fa-sort ml-1"></i></th>
+                  <th class="p-3 text-center rounded-r-xl">Mobility Archetype</th>
+                </tr>
+              </thead>
+              <tbody id="stateTableBody" class="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                <!-- Table rows generated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: State Inspector Sidebar & Analytical Insights (4 Cols) -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <!-- Selected State Detail Card -->
+        <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden" id="stateDetailCard">
+          
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <span class="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              <i class="fa-solid fa-location-dot mr-1"></i> State Inspector
+            </span>
+            <span id="detailBadge" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300">
+              Select a state
+            </span>
+          </div>
+
+          <div class="mt-4 space-y-4">
+            <div>
+              <h3 id="detailStateName" class="font-display font-extrabold text-2xl text-slate-900 dark:text-white">
+                Tamil Nadu
+              </h3>
+              <p id="detailArchetype" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Transit Champion (High PT / Low Car)
+              </p>
+            </div>
+
+            <!-- Detailed Stat Comparison Bar -->
+            <div class="space-y-3 pt-2">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-600 dark:text-slate-400">Public Transport Commute Share:</span>
+                  <span id="detailPtVal" class="font-bold text-emerald-600 dark:text-emerald-400">32.7%</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                  <div id="detailPtBar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full" style="width: 80.5%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-600 dark:text-slate-400">Car Ownership Rate (NFHS-5):</span>
+                  <span id="detailCarVal" class="font-bold text-rose-500">6.5%</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                  <div id="detailCarBar" class="bg-gradient-to-r from-rose-500 to-amber-500 h-2.5 rounded-full" style="width: 14.3%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-600 dark:text-slate-400">Transit Reliance Index (PT ÷ Car):</span>
+                  <span id="detailRatioVal" class="font-bold text-indigo-600 dark:text-indigo-400">5.03x</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                  <div id="detailRatioBar" class="bg-gradient-to-r from-indigo-500 to-purple-500 h-2.5 rounded-full" style="width: 70%"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Insights paragraph -->
+            <div class="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-100 dark:border-slate-800 text-xs leading-relaxed text-slate-600 dark:text-slate-300" id="detailDescription">
+              Tamil Nadu exhibits high public transport reliance relative to low personal motorization. Extensive state bus networks (TNSTC) and suburban rail infrastructure provide broad mobility access without heavy car dependency.
+            </div>
+
+            <!-- Quick State Selector Grid -->
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">Quick Select Major States:</span>
+              <div class="flex flex-wrap gap-1.5" id="quickSelectPills">
+                <!-- Javascript populated pills -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Key Policy Insights Card -->
+        <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
+          <h3 class="font-display font-bold text-sm text-slate-900 dark:text-white flex items-center">
+            <i class="fa-solid fa-lightbulb text-amber-500 mr-2"></i> Key Mobility Insights
+          </h3>
+          <ul class="text-xs space-y-2 text-slate-600 dark:text-slate-300 list-disc list-inside">
+            <li><strong class="text-slate-800 dark:text-slate-200">Hill States & Sprawls:</strong> High car ownership in Goa (45.2%), J&K (23.7%), and HP (22.1%) is heavily influenced by geography, terrain, and tourism density.</li>
+            <li><strong class="text-slate-800 dark:text-slate-200">The Urban Core Effect:</strong> Maharashtra (28.5% PT) and West Bengal (26.0% PT) leverage suburban commuter rail networks to move millions efficiently.</li>
+            <li><strong class="text-slate-800 dark:text-slate-200">Non-Car Dependent Hubs:</strong> States like UP, Bihar, and Odisha show low car ownership (&lt;6%) yet low formal public commute share (&lt;13%), pointing to high 2-wheeler and informal transit usage.</li>
+          </ul>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Footnotes & Sources -->
+    <footer class="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <div>
+        <strong>Data Sources:</strong> NFHS-5 (2019–21) Household Car Ownership % &amp; Census 2011 Public Transport Commute Share (Bus + Train).
+      </div>
+      <div>
+        <span class="inline-flex items-center gap-1">
+          <i class="fa-solid fa-circle-check text-emerald-500"></i> Interactive Infographic Dashboard
+        </span>
+      </div>
+    </footer>
+
+  </main>
+
+  <script>
+    // --- RAW DATASET ---
+    const RAW_DATA = [
+      { name: "Jammu & Kashmir", car: 23.7, pt: 40.6, region: "North", code: "JK" },
+      { name: "Himachal Pradesh", car: 22.1, pt: 34.5, region: "North", code: "HP" },
+      { name: "Punjab", car: 21.9, pt: 11.1, region: "North", code: "PB" },
+      { name: "Uttarakhand", car: 12.7, pt: 12.7, region: "North", code: "UK" },
+      { name: "Haryana", car: 15.3, pt: 18.3, region: "North", code: "HR" },
+      { name: "Delhi", car: 19.4, pt: 29.4, region: "North", code: "DL" },
+      { name: "Rajasthan", car: 8.2, pt: 18.3, region: "West", code: "RJ" },
+      { name: "Uttar Pradesh", car: 5.5, pt: 11.7, region: "North", code: "UP" },
+      { name: "Bihar", car: 2.0, pt: 12.6, region: "East", code: "BR" },
+      { name: "Sikkim", car: 20.9, pt: 3.9, region: "Northeast", code: "SK" },
+      { name: "Arunachal Pradesh", car: 19.3, pt: 4.9, region: "Northeast", code: "AR" },
+      { name: "Nagaland", car: 21.3, pt: 8.5, region: "Northeast", code: "NL" },
+      { name: "Manipur", car: 17.0, pt: 15.1, region: "Northeast", code: "MN" },
+      { name: "Mizoram", car: 15.5, pt: 15.2, region: "Northeast", code: "MZ" },
+      { name: "Tripura", car: 4.6, pt: 8.6, region: "Northeast", code: "TR" },
+      { name: "Meghalaya", car: 12.9, pt: 10.8, region: "Northeast", code: "ML" },
+      { name: "Assam", car: 8.1, pt: 12.2, region: "Northeast", code: "AS" },
+      { name: "West Bengal", car: 2.8, pt: 26.0, region: "East", code: "WB" },
+      { name: "Odisha", car: 2.8, pt: 10.0, region: "East", code: "OD" },
+      { name: "Chhattisgarh", car: 4.3, pt: 6.6, region: "Central", code: "CG" },
+      { name: "Madhya Pradesh", car: 5.3, pt: 10.6, region: "Central", code: "MP" },
+      { name: "Gujarat", car: 10.9, pt: 9.6, region: "West", code: "GJ" },
+      { name: "Maharashtra", car: 8.7, pt: 28.5, region: "West", code: "MH" },
+      { name: "Andhra Pradesh", car: 2.8, pt: 20.3, region: "South", code: "AP" },
+      { name: "Karnataka", car: 9.1, pt: 28.7, region: "South", code: "KA" },
+      { name: "Goa", car: 45.2, pt: 35.2, region: "West", code: "GA" },
+      { name: "Kerala", car: 24.2, pt: 40.0, region: "South", code: "KL" },
+      { name: "Tamil Nadu", car: 6.5, pt: 32.7, region: "South", code: "TN" },
+      { name: "Telangana", car: 6.5, pt: 20.3, region: "South", code: "TS" }
+    ];
+
+    // Compute derived ratio and metrics
+    RAW_DATA.forEach(d => {
+      d.ratio = +(d.pt / d.car).toFixed(2);
+      if (d.pt >= 20 && d.car < 15) {
+        d.archetype = "Transit Champion";
+        d.archClass = "emerald";
+      } else if (d.pt >= 20 && d.car >= 15) {
+        d.archetype = "Dual Mobility Hub";
+        d.archClass = "indigo";
+      } else if (d.pt < 20 && d.car >= 15) {
+        d.archetype = "Car-Heavy Sprawl";
+        d.archClass = "amber";
+      } else {
+        d.archetype = "Under-Connected";
+        d.archClass = "rose";
+      }
+    });
+
+    // Approximate Coordinates for SVG Map Grid Representation (India State Relative Map Grid)
+    const STATE_MAP_COORDS = {
+      "JK": { x: 230, y: 70, shape: "M200,40 L260,30 L280,70 L250,110 L200,90 Z" },
+      "HP": { x: 250, y: 130, shape: "M240,110 L275,100 L285,135 L245,145 Z" },
+      "PB": { x: 205, y: 145, shape: "M195,130 L235,130 L235,165 L195,165 Z" },
+      "UK": { x: 295, y: 150, shape: "M280,135 L320,130 L320,165 L280,165 Z" },
+      "HR": { x: 220, y: 185, shape: "M205,170 L245,170 L245,205 L205,205 Z" },
+      "DL": { x: 252, y: 195, shape: "M247,190 L262,190 L262,205 L247,205 Z" },
+      "RJ": { x: 150, y: 230, shape: "M100,180 L195,180 L185,275 L100,260 Z" },
+      "UP": { x: 300, y: 220, shape: "M250,180 L360,190 L360,250 L250,240 Z" },
+      "BR": { x: 395, y: 250, shape: "M365,225 L435,225 L435,265 L365,265 Z" },
+      "SK": { x: 445, y: 210, shape: "M438,200 L458,200 L458,220 L438,220 Z" },
+      "AR": { x: 550, y: 195, shape: "M515,170 L580,180 L560,215 L515,200 Z" },
+      "AS": { x: 515, y: 240, shape: "M475,225 L555,225 L545,255 L475,255 Z" },
+      "NL": { x: 565, y: 245, shape: "M550,230 L580,230 L580,260 L550,260 Z" },
+      "MN": { x: 560, y: 280, shape: "M545,265 L575,265 L575,295 L545,295 Z" },
+      "MZ": { x: 545, y: 320, shape: "M530,300 L560,300 L550,340 L530,340 Z" },
+      "TR": { x: 510, y: 310, shape: "M500,295 L525,295 L525,325 L500,325 Z" },
+      "ML": { x: 490, y: 265, shape: "M470,255 L510,255 L510,275 L470,275 Z" },
+      "WB": { x: 425, y: 310, shape: "M420,270 L450,270 L440,360 L410,320 Z" },
+      "OD": { x: 365, y: 350, shape: "M335,310 L405,320 L385,385 L335,360 Z" },
+      "CG": { x: 305, y: 330, shape: "M285,290 L330,290 L320,380 L285,350 Z" },
+      "MP": { x: 235, y: 300, shape: "M180,265 L280,265 L280,340 L180,330 Z" },
+      "GJ": { x: 100, y: 320, shape: "M50,270 L140,275 L130,365 L50,330 Z" },
+      "MH": { x: 195, y: 400, shape: "M135,350 L270,350 L250,445 L135,420 Z" },
+      "TS": { x: 260, y: 430, shape: "M230,395 L290,395 L280,455 L230,445 Z" },
+      "AP": { x: 270, y: 505, shape: "M250,460 L295,430 L300,535 L240,540 Z" },
+      "KA": { x: 185, y: 500, shape: "M150,435 L225,435 L215,550 L150,520 Z" },
+      "GA": { x: 140, y: 475, shape: "M130,465 L148,465 L148,485 L130,485 Z" },
+      "KL": { x: 180, y: 590, shape: "M165,545 L190,545 L180,635 L165,615 Z" },
+      "TN": { x: 220, y: 585, shape: "M195,540 L250,540 L230,630 L195,620 Z" }
+    };
+
+    let activeMetric = 'pt'; // 'pt', 'car', 'ratio'
+    let currentView = 'map'; // 'map', 'scatter', 'table'
+    let selectedState = RAW_DATA.find(d => d.name === "Tamil Nadu");
+    let scatterChartInstance = null;
+
+    // --- STREAMING_CHUNK:Initializing application components & theme... ---
+    document.addEventListener("DOMContentLoaded", () => {
+      initQuickPills();
+      renderMap();
+      renderTable();
+      initScatterChart();
+      updateDetailCard(selectedState);
+    });
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+      setTimeout(() => {
+        if (scatterChartInstance) scatterChartInstance.update();
+      }, 100);
+    }
+
+    function switchMainView(view) {
+      currentView = view;
+      document.getElementById('panelMapView').classList.add('hidden');
+      document.getElementById('panelScatterView').classList.add('hidden');
+      document.getElementById('panelTableView').classList.add('hidden');
+
+      // Reset button styles
+      ['Map', 'Scatter', 'Table'].forEach(v => {
+        const btn = document.getElementById('btnView' + v);
+        btn.className = "px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+      });
+
+      if (view === 'map') {
+        document.getElementById('panelMapView').classList.remove('hidden');
+        document.getElementById('btnViewMap').className = "px-3 py-1.5 rounded-lg font-semibold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs";
+      } else if (view === 'scatter') {
+        document.getElementById('panelScatterView').classList.remove('hidden');
+        document.getElementById('btnViewScatter').className = "px-3 py-1.5 rounded-lg font-semibold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs";
+        if (scatterChartInstance) scatterChartInstance.update();
+      } else if (view === 'table') {
+        document.getElementById('panelTableView').classList.remove('hidden');
+        document.getElementById('btnViewTable').className = "px-3 py-1.5 rounded-lg font-semibold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs";
+      }
+    }
+
+    // --- MAP RENDERER ---
+    function setMapMetric(metric) {
+      activeMetric = metric;
+
+      const btnPT = document.getElementById('btnMetricPT');
+      const btnCar = document.getElementById('btnMetricCar');
+      const btnRatio = document.getElementById('btnMetricRatio');
+
+      const activeClass = "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm text-white ";
+      const inactiveClass = "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800";
+
+      btnPT.className = inactiveClass;
+      btnCar.className = inactiveClass;
+      btnRatio.className = inactiveClass;
+
+      if (metric === 'pt') {
+        btnPT.className = activeClass + "bg-emerald-500";
+        document.getElementById('mapTitle').innerText = "Public Commute Share (%)";
+        document.getElementById('mapSubtitle').innerText = "Bus & Train daily commuter share (Census 2011)";
+      } else if (metric === 'car') {
+        btnCar.className = activeClass + "bg-rose-500";
+        document.getElementById('mapTitle').innerText = "Car Ownership Share (%)";
+        document.getElementById('mapSubtitle').innerText = "Percentage of households owning a car (NFHS-5, 2019–21)";
+      } else {
+        btnRatio.className = activeClass + "bg-indigo-600";
+        document.getElementById('mapTitle').innerText = "Transit Reliance Index (PT % ÷ Car %)";
+        document.getElementById('mapSubtitle').innerText = "Multiplier showing public transport dominance over car ownership";
+      }
+
+      renderMap();
+    }
+
+    function getColorScale(metric) {
+      if (metric === 'pt') {
+        return d3.scaleSequential()
+          .domain([0, 42])
+          .interpolator(d3.interpolateRgb("#ecfdf5", "#047857")); // Emerald gradient
+      } else if (metric === 'car') {
+        return d3.scaleSequential()
+          .domain([0, 46])
+          .interpolator(d3.interpolateRgb("#fff1f2", "#be123c")); // Rose gradient
+      } else {
+        return d3.scaleSequential()
+          .domain([0, 10])
+          .interpolator(d3.interpolateRgb("#f5f3ff", "#6d28d9")); // Indigo gradient
+      }
+    }
+
+    function renderMap() {
+      const svg = d3.select("#indiaMapSvg");
+      svg.selectAll("*").remove();
+
+      const colorScale = getColorScale(activeMetric);
+
+      // Render legend
+      renderLegend(colorScale);
+
+      // Create state nodes map
+      const g = svg.append("g");
+
+      RAW_DATA.forEach(d => {
+        const geo = STATE_MAP_COORDS[d.code];
+        if (!geo) return;
+
+        let val = d[activeMetric];
+        let fillColor = colorScale(val);
+
+        // State Path
+        const statePath = g.append("path")
+          .attr("d", geo.shape)
+          .attr("class", "map-state")
+          .attr("fill", fillColor)
+          .attr("opacity", selectedState && selectedState.code === d.code ? 1 : 0.85)
+          .attr("stroke", selectedState && selectedState.code === d.code ? "#3b82f6" : "#ffffff")
+          .attr("stroke-width", selectedState && selectedState.code === d.code ? 3 : 1)
+          .on("mouseover", (event) => showTooltip(event, d))
+          .on("mousemove", (event) => moveTooltip(event))
+          .on("mouseout", hideTooltip)
+          .on("click", () => selectState(d));
+
+        // Label Text
+        g.append("text")
+          .attr("x", geo.x)
+          .attr("y", geo.y)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .attr("fill", "#0f172a")
+          .attr("font-size", "10px")
+          .attr("font-weight", "800")
+          .attr("pointer-events", "none")
+          .style("text-shadow", "0px 0px 3px rgba(255,255,255,0.9)")
+          .text(d.code);
+
+        // Subtext metric value
+        g.append("text")
+          .attr("x", geo.x)
+          .attr("y", geo.y + 11)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .attr("fill", "#1e293b")
+          .attr("font-size", "8px")
+          .attr("font-weight", "600")
+          .attr("pointer-events", "none")
+          .style("text-shadow", "0px 0px 3px rgba(255,255,255,0.9)")
+          .text(activeMetric === 'ratio' ? `${val}x` : `${val}%`);
+      });
+    }
+
+    function renderLegend(colorScale) {
+      const legendContainer = document.getElementById("mapLegend");
+      legendContainer.innerHTML = "";
+
+      let labelText = activeMetric === 'pt' ? 'Low PT' : (activeMetric === 'car' ? 'Low Cars' : 'Low Reliance');
+      let highText = activeMetric === 'pt' ? 'High PT (40%+)' : (activeMetric === 'car' ? 'High Cars (45%+)' : 'High Ratio (10x)');
+
+      const ticks = [0, 0.25, 0.5, 0.75, 1];
+      const maxVal = activeMetric === 'pt' ? 42 : (activeMetric === 'car' ? 46 : 10);
+
+      const html = `
+        <span class="text-slate-400 mr-1">${labelText}</span>
+        <div class="flex h-2.5 w-24 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
+          ${ticks.map(t => `<div class="flex-1" style="background-color: ${colorScale(t * maxVal)}"></div>`).join('')}
+        </div>
+        <span class="text-slate-400 ml-1">${highText}</span>
+      `;
+      legendContainer.innerHTML = html;
+    }
+
+    // Tooltip logic
+    const tooltip = document.getElementById("mapTooltip");
+
+    function showTooltip(event, d) {
+      tooltip.classList.remove("hidden");
+      tooltip.innerHTML = `
+        <div class="font-bold text-slate-900 dark:text-white flex items-center justify-between gap-2">
+          <span>${d.name}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">${d.region}</span>
+        </div>
+        <div class="mt-1 space-y-0.5 text-slate-600 dark:text-slate-300">
+          <div>Public Commute: <strong class="text-emerald-500">${d.pt}%</strong></div>
+          <div>Car Ownership: <strong class="text-rose-500">${d.car}%</strong></div>
+          <div>Reliance Index: <strong class="text-indigo-500">${d.ratio}x</strong></div>
+        </div>
+      `;
+      moveTooltip(event);
+    }
+
+    function moveTooltip(event) {
+      const bounds = document.getElementById("panelMapView").getBoundingClientRect();
+      const x = event.clientX - bounds.left + 15;
+      const y = event.clientY - bounds.top + 15;
+      tooltip.style.left = `${x}px`;
+      tooltip.style.top = `${y}px`;
+    }
+
+    function hideTooltip() {
+      tooltip.classList.add("hidden");
+    }
+
+    function initScatterChart() {
+      const ctx = document.getElementById('mobilityScatterChart').getContext('2d');
+
+      const dataPoints = RAW_DATA.map(d => ({
+        x: d.car,
+        y: d.pt,
+        state: d
+      }));
+
+      scatterChartInstance = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Indian States / UTs',
+            data: dataPoints,
+            backgroundColor: (ctx) => {
+              const raw = ctx.raw?.state;
+              if (!raw) return '#6366f1';
+              if (raw.archClass === 'emerald') return '#10b981';
+              if (raw.archClass === 'indigo') return '#6366f1';
+              if (raw.archClass === 'amber') return '#f59e0b';
+              return '#f43f5e';
+            },
+            pointRadius: 7,
+            pointHoverRadius: 10,
+            pointBorderWidth: 1.5,
+            pointBorderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  const s = ctx.raw.state;
+                  return `${s.name}: ${s.car}% Cars, ${s.pt}% PT Share (${s.archetype})`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Car Ownership % (NFHS-5)',
+                color: '#94a3b8',
+                font: { size: 11, weight: 'bold' }
+              },
+              min: 0,
+              max: 50,
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Public Transport Share % (Census)',
+                color: '#94a3b8',
+                font: { size: 11, weight: 'bold' }
+              },
+              min: 0,
+              max: 45,
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            }
+          },
+          onClick: (evt, activeEls) => {
+            if (activeEls.length > 0) {
+              const index = activeEls[0].index;
+              selectState(RAW_DATA[index]);
+            }
+          }
+        }
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("stateTableBody");
+      tbody.innerHTML = "";
+
+      RAW_DATA.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer";
+        tr.onclick = () => selectState(d);
+
+        let badgeBg = d.archClass === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                      d.archClass === 'indigo' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' :
+                      d.archClass === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+                      'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
+
+        tr.innerHTML = `
+          <td class="p-3 font-semibold text-slate-900 dark:text-white">${d.name}</td>
+          <td class="p-3 text-right text-rose-600 dark:text-rose-400 font-mono">${d.car}%</td>
+          <td class="p-3 text-right text-emerald-600 dark:text-emerald-400 font-mono">${d.pt}%</td>
+          <td class="p-3 text-right font-bold text-indigo-600 dark:text-indigo-400 font-mono">${d.ratio}x</td>
+          <td class="p-3 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeBg}">
+              ${d.archetype}
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterTable() {
+      const q = document.getElementById("tableSearch").value.toLowerCase();
+      const rows = document.querySelectorAll("#stateTableBody tr");
+      rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(q) ? "" : "none";
+      });
+    }
+
+    let sortDirection = 1;
+    function sortTable(colIndex) {
+      sortDirection *= -1;
+      RAW_DATA.sort((a, b) => {
+        let valA, valB;
+        if (colIndex === 0) { valA = a.name; valB = b.name; }
+        else if (colIndex === 1) { valA = a.car; valB = b.car; }
+        else if (colIndex === 2) { valA = a.pt; valB = b.pt; }
+        else if (colIndex === 3) { valA = a.ratio; valB = b.ratio; }
+
+        if (valA < valB) return -1 * sortDirection;
+        if (valA > valB) return 1 * sortDirection;
+        return 0;
+      });
+      renderTable();
+    }
+
+    function initQuickPills() {
+      const container = document.getElementById("quickSelectPills");
+      const keyStates = ["Tamil Nadu", "Maharashtra", "Punjab", "Kerala", "Goa", "Bihar", "Delhi", "West Bengal"];
+      
+      keyStates.forEach(sName => {
+        const d = RAW_DATA.find(x => x.name === sName);
+        if (!d) return;
+        const btn = document.createElement("button");
+        btn.className = "px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 transition-all";
+        btn.innerText = d.name;
+        btn.onclick = () => selectState(d);
+        container.appendChild(btn);
+      });
+    }
+
+    function selectState(d) {
+      selectedState = d;
+      updateDetailCard(d);
+      renderMap();
+    }
+
+    function updateDetailCard(d) {
+      document.getElementById("detailStateName").innerText = d.name;
+      document.getElementById("detailArchetype").innerText = `${d.archetype} (${d.region} Region)`;
+      
+      const badge = document.getElementById("detailBadge");
+      badge.innerText = d.code;
+
+      document.getElementById("detailPtVal").innerText = `${d.pt}%`;
+      document.getElementById("detailCarVal").innerText = `${d.car}%`;
+      document.getElementById("detailRatioVal").innerText = `${d.ratio}x`;
+
+      // Update progress bar widths (scaled to realistic maximums)
+      document.getElementById("detailPtBar").style.width = `${Math.min(100, (d.pt / 42) * 100)}%`;
+      document.getElementById("detailCarBar").style.width = `${Math.min(100, (d.car / 46) * 100)}%`;
+      document.getElementById("detailRatioBar").style.width = `${Math.min(100, (d.ratio / 10) * 100)}%`;
+
+      // Text narrative logic
+      let desc = "";
+      if (d.archetype === "Transit Champion") {
+        desc = `<strong>${d.name}</strong> stands as a Transit Champion with a strong public transport share (${d.pt}%) relative to modest car ownership (${d.car}%). Public bus and commuter rail infrastructure serves as the primary mobility backbone for daily commuting.`;
+      } else if (d.archetype === "Dual Mobility Hub") {
+        desc = `<strong>${d.name}</strong> exhibits dual mobility characteristics—high private vehicle ownership (${d.car}%) accompanied by robust public transport usage (${d.pt}%). High household income or specialized regional geography drives car purchasing while robust bus/rail transport accommodates daily passenger volume.`;
+      } else if (d.archetype === "Car-Heavy Sprawl") {
+        desc = `In <strong>${d.name}</strong>, private car ownership (${d.car}%) significantly outpaces public transport reliance (${d.pt}%). Factors include high per-capita vehicle adoption, highway expansion, or limited last-mile mass transport connectivity.`;
+      } else {
+        desc = `<strong>${d.name}</strong> shows both low car ownership (${d.car}%) and low formal public commute share (${d.pt}%). Daily transit is heavily reliant on two-wheelers, auto-rickshaws, non-motorized transport, and walking.`;
+      }
+
+      document.getElementById("detailDescription").innerHTML = desc;
+    }
+  </script>
+</body>
+</html>
